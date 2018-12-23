@@ -26,20 +26,54 @@
 # +
 import os
 import shutil
-from io import StringIO, BytesIO
+from io import StringIO, BytesIO, IOBase
 import xml.etree.ElementTree as ET
 from lxml import etree
 
 data_loc = 'data/Safari_Bookmarks_2018_12_22.html'
-# -
 
-class TreeNode(Object):
+# +
+from enum import Enum
+
+class TreeNodeType(Enum):
+    FOLDED=1
+    LINK=2
+
+class TreeNode(object):
     """
     TreeNode for generic tree construction.
     """
-    def __init__(self, _val:dict, _children:[]=None):
+    def __init__(self, _val: dict, _children: []=None):
+        assert (_val is not None) and ("type" in _val) and ("name" in _val)
         self.val = _val
         self.children = []
         if _children:
             for child in _children:
                 self.children.append(child)
+    
+    @classmethod
+    def newTreeNode(cls, _val: dict):
+        return cls(_val)
+# -
+
+class Forest(object):
+    """
+    Forest constructed by list of parallel Tree from parsing html tree.
+    """
+    def __init__(self, fname: str):
+        self.roots = []
+        assert os.path.exists(str)
+        with open(fname, 'rb') as f:
+            with line in f:
+                raise NotImplementedError
+        
+    def newTree(self, root: TreeNode=None, f: IOBase):
+        """
+        new Tree and return root node of Tree via parsing input file handle f.
+        """
+        return root
+
+root = TreeNode.newTreeNode({
+    "type": TreeNodeType.FOLDED,
+    "name": "Favoritess"
+})

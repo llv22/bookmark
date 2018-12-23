@@ -33,4 +33,13 @@ from lxml import etree
 data_loc = 'data/Safari_Bookmarks_2018_12_22.html'
 # -
 
-
+class TreeNode(Object):
+    """
+    TreeNode for generic tree construction.
+    """
+    def __init__(self, _val:dict, _children:[]=None):
+        self.val = _val
+        self.children = []
+        if _children:
+            for child in _children:
+                self.children.append(child)

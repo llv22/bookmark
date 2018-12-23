@@ -30,7 +30,7 @@ from io import StringIO, BytesIO
 import xml.etree.ElementTree as ET
 from lxml import etree
 
-data_loc = 'data/Safari_Bookmarks_20181218.html'
+data_loc = 'data/Safari_Bookmarks_2018_12_22.html'
 # -
 
 # https://stackoverflow.com/questions/31543085/python-xml-handle-unclosed-token

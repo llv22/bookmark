@@ -33,15 +33,4 @@ from lxml import etree
 data_loc = 'data/Safari_Bookmarks_2018_12_22.html'
 # -
 
-# https://stackoverflow.com/questions/31543085/python-xml-handle-unclosed-token
-parser = etree.XMLParser(recover=True, encoding='utf-8')
-tree = etree.parse(StringIO(data_loc), parser)
-
-print(len(parser.error_log))
-error = parser.error_log[0]
-print(error.message)
-print(error.line)
-
-print(StringIO(data_loc).getvalue())
-
 

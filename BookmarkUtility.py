@@ -173,8 +173,6 @@ class Forest(object):
         return root
                 
     def preOrder(self):
-        self.conflict_dict = {}; self.t = 0; self.duplicate_total = 0
-        
         def preOrderTree(node: TreeNode):
             if node:
                 if node.val["type"] == TreeNodeType.LINK:
@@ -186,9 +184,11 @@ class Forest(object):
                     self.t += 1
                 for child in node.children:
                     preOrderTree(child)
-                    
+                  
+        self.conflict_dict = {}; self.t = 0; self.duplicate_total = 0  
         for root in self.roots:
             preOrderTree(root)
+            
         print("total url link: ", self.t)
         print("duplicate total url link: ", self.duplicate_total)
         duplicate_dict = {k:v for k, v in self.conflict_dict.items() if v > 1}

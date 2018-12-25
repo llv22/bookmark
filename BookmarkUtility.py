@@ -192,7 +192,7 @@ class Forest(object):
         print("total url link: ", self.t)
         print("duplicate total url link: ", self.duplicate_total)
         duplicate_dict = {k:v for k, v in self.conflict_dict.items() if v > 1}
-        display("duplicate url links: ", duplicate_dict)
+#         display("duplicate url links: ", duplicate_dict)
         print("max duplicate number of url link: ", max(duplicate_dict.values()))
 
 forest = Forest(data_loc)

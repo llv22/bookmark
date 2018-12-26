@@ -260,7 +260,7 @@ def verify(arg):
     index, url = arg
     valid = False; msg = None; 
     try:
-        with urllib.request.urlopen(url, timeout=2.) as response:
+        with urllib.request.urlopen(url, timeout=3.) as response:
             if response.getcode() == 200:
                 valid = True
                 msg = url

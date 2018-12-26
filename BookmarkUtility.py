@@ -27,10 +27,11 @@
 import os
 import re
 import shutil
+import urllib
+import pickle
+from http.client import IncompleteRead
+from urllib.error import HTTPError, URLError
 from io import StringIO, BytesIO, IOBase, TextIOBase
-import xml.etree.ElementTree as ET
-from lxml import etree
-from IPython.display import display
 
 data_loc = 'data/Safari_Bookmarks_2018_12_22.html'
 
@@ -68,15 +69,15 @@ class Forest(object):
     """
     def __init__(self, fname: str):
         self.roots = []
+        self.fname = fname
         assert os.path.exists(fname)
         # check if end of f IOBase, record it first, then use for comparsion of closing
-        with open(fname, 'rb') as f:
+        with open(self.fname, 'rb') as f:
             # mark the end of stream, refer to https://stackoverflow.com/questions/10140281/how-to-find-out-whether-a-file-is-at-its-eof
             f.seek(-1, os.SEEK_END); self.eof = f.tell(); f.seek(0, os.SEEK_SET)
             while f.tell() != self.eof + 1:
-                root = self.newTree(f)
-                if root:
-                    self.roots.append(root)
+                roots = self.newTree(f)
+                self.roots.extend([x for x in roots if x])
             
     def newTree(self, f: TextIOBase, level: int=0, parent: TreeNode=None):
         """[new Tree and return root node of Tree via parsing input file handle f.]
@@ -87,6 +88,8 @@ class Forest(object):
             f [IOBase] - [input file handler]
             level [int] - [level in the current tree]
             parent [TreeNode] - [parent node of current treeNode, if exists, otherwise, it's None]
+        Returns:
+            roots [list(TreeNode)] - list of items in tree
         """
         def findFirstDT(f: TextIOBase):
             """
@@ -155,24 +158,26 @@ class Forest(object):
         
         # find the first <DT> in tree structure for FOLDER or HREF
         l, align, fstart, existItem = findFirstDT(f)
-        root = None
+        roots = []
         if existItem:
             # only handle with item existing case
             content = l[4:]
             root = createNode(content, f, parent)
+            roots.append(root)
 
             nl, nalgin, nfstart = findNextLineDT(f)
             while (align == nalgin) and (nl[:4] == '<DT>'): 
                 # if it's in the same level, already item for nextline
                 content = nl[4:]
-                createNode(content, f, parent)
+                root = createNode(content, f, parent)
+                roots.append(root)
                 nl, nalgin, nfstart = findNextLineDT(f)
             else:
                 # else if it's not in the same level, somehow need to rollback
                 f.seek(nfstart, os.SEEK_SET)
-        return root
+        return roots
                 
-    def preOrder(self):
+    def preOrder(self, verifyURL: bool=False):
         def preOrderTree(node: TreeNode):
             if node:
                 if node.val["type"] == TreeNodeType.LINK:
@@ -182,20 +187,125 @@ class Forest(object):
                         self.conflict_dict[node.val["link"]] += 1
                         self.duplicate_total += 1
                     self.t += 1
+                    self.total_urls.append(node.val["link"])
+                    if verifyURL:
+                        # if verification is enabled
+                        if node.val["link"] not in self.validurls:
+                            try:
+                                with urllib.request.urlopen(node.val["link"]) as response:
+                                    if response.getcode() == 200:
+                                        self.validurls.append(node.val["link"])
+                            except HTTPError as ex:
+                                self.invalidurl_dict[node.val["link"]] = ex.code
+                            except URLError as ex:
+                                self.invalidurl_dict[node.val["link"]] = ex.strerror
                 for child in node.children:
                     preOrderTree(child)
+        
+        def verifyUrls():
+            urls = []
+            with open(self.fname, 'rt') as f:
+                for line in f:
+                    m1 = re.search(r'(?<=<A HREF=)(.*?)(?=</A>)', line)
+                    if m1:
+                        url, val = m1.group(0).split(">") 
+                        # remove "" for url
+                        url = url[1:-1]
+                        urls.append(url)
+            return urls
                   
-        self.conflict_dict = {}; self.t = 0; self.duplicate_total = 0  
+        self.conflict_dict = {}; self.t = 0; self.duplicate_total = 0; self.total_urls = []; 
+        self.validurls = []; self.invalidurl_dict = {}
         for root in self.roots:
             preOrderTree(root)
-            
-        print("total url link: ", self.t)
-        print("duplicate total url link: ", self.duplicate_total)
-        duplicate_dict = {k:v for k, v in self.conflict_dict.items() if v > 1}
-#         display("duplicate url links: ", duplicate_dict)
-        print("max duplicate number of url link: ", max(duplicate_dict.values()))
+        
+        # verify if tree's url are equal with file url
+        _urls = verifyUrls()
+        assert len(self.total_urls) == len(_urls)
+        for turl in _urls:
+            assert turl in forest.total_urls
+        
+        # return key figure to client
+        if verifyURL:
+            return self.t, self.duplicate_total, self.conflict_dict, self.validurls, self.invalidurl_dict
+        else:
+            return self.t, self.duplicate_total, self.conflict_dict
 
 forest = Forest(data_loc)
-forest.preOrder()
+total_urls, duplicate_urls, conflict_dict = forest.preOrder()
+print("total number of url link: ", total_urls)
+print("number of duplicate url out of total url link: ", duplicate_urls)
+duplicate_dict = {k:v for k, v in conflict_dict.items() if v > 1}
+print("max duplicate number of url link: ", max(duplicate_dict.values()))
+
+# +
+from multiprocessing import Pool
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor
+from socket import timeout
+import ssl
+ssl.match_hostname = lambda cert, hostname: True
+
+proxies = {
+    'http': 'http://proxy.hkg.sap.corp:8080',
+    'https': 'http://proxy.hkg.sap.corp:8080',
+    'no': "localhost,*.sap.corp"
+    }
+
+proxy = urllib.request.ProxyHandler(proxies)
+opener = urllib.request.build_opener(proxy)
+urllib.request.install_opener(opener)
+
+def verify(arg):
+    index, url = arg
+    valid = False; msg = None; 
+    try:
+        with urllib.request.urlopen(url, timeout=2.) as response:
+            if response.getcode() == 200:
+                valid = True
+                msg = url
+            else:
+                msg = response.getcode()
+    except HTTPError as ex:
+        msg = ex.code
+    except URLError as ex:
+        msg = ex.strerror
+    except IncompleteRead as ex:
+        msg = ex
+    except timeout as ex:
+        msg = ex
+    return index, valid, msg
+
+# using multiprocessing to check url validation
+urls = list(conflict_dict.keys())
+urls_status = [None] * len(urls)
+with ProcessPoolExecutor(max_workers=10) as executor:
+    # refer to https://github.com/tqdm/tqdm#iterable-based#user-content-usage and https://stackoverflow.com/questions/37506645/can-i-add-message-to-the-tqdm-progressbar/37523994
+    for index, valid, msg in tqdm(executor.map(verify,  enumerate(urls)), total=len(urls)):
+        urls_status[index] = (valid, msg)
+# -
+
+valid_urls_list = [url for status, url in urls_status if status]
+
+valid_urls_list
+
+invalid_urls_dict = {urls[index]: desc for index, (status, desc) in enumerate(urls_status) if not status}
+
+invalid_urls_dict
+
+# +
+with open("data/valid_urls_list.pickle", "wb") as handle:
+    pickle.dump(valid_urls_list, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    
+with open("data/invalid_urls_dict.pickle", "wb") as handle:
+    pickle.dump(invalid_urls_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)  
+# -
+
+len(invalid_urls_dict)
+
+len(valid_urls_list)
+
+# redirection to others, if code == 503
+len({x:y for x, y in invalid_urls_dict.items() if y==503})
 
 

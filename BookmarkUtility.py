@@ -260,7 +260,7 @@ def verify(arg):
     index, url = arg
     valid = False; msg = None; 
     try:
-        with urllib.request.urlopen(url, timeout=3.) as response:
+        with urllib.request.urlopen(url) as response:
             if response.getcode() == 200:
                 valid = True
                 msg = url
@@ -287,11 +287,14 @@ with ProcessPoolExecutor(max_workers=10) as executor:
 
 valid_urls_list = [url for status, url in urls_status if status]
 
-valid_urls_list
+# +
+# valid_urls_list
+# -
 
 invalid_urls_dict = {urls[index]: desc for index, (status, desc) in enumerate(urls_status) if not status}
 
-invalid_urls_dict
+# +
+# invalid_urls_dict
 
 # +
 with open("data/valid_urls_list.pickle", "wb") as handle:
